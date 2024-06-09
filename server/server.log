@@ -1,0 +1,5 @@
+10/06/2024 12:53:38 : DEBUG : main.py : Socket is listening
+10/06/2024 12:53:43 : DEBUG : main.py : Connect from spiwt ('127.0.0.1', 50777)
+10/06/2024 12:53:44 : DEBUG : main.py : Connect from spiwt ('127.0.0.1', 50779)
+10/06/2024 12:54:22 : DEBUG : main.py : Connect from spiwt ('127.0.0.1', 50816)
+10/06/2024 12:54:47 : DEBUG : main.py : Connect from mamy_traxal ('127.0.0.1', 50819)
