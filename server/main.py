@@ -11,13 +11,18 @@ async def connect(s):
             connection, addr = s.accept()
             connection.send('give me your data'.encode())
 
-            data = json.loads(connection.recv(1024).decode().replace('\'','\"'))
+            data = json.loads(connection.recv(1024).decode().replace('\'', '\"'))
+            if data['username'] == "None":
+                connection.send('select username'.encode())
+                data = json.loads(connection.recv(1024).decode().replace('\'', '\"'))
+            connection.send('Successful login'.encode())
 
             logging.debug(f'Connect from {data['username']} {addr}')
+            logging.debug(f'{data['username']} {connection.recv(1024).decode()}')
 
             connection.close()
     except Exception as e:
-        print(e)
+        logging.error(e)
 
 
 async def main():
@@ -28,7 +33,6 @@ async def main():
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(filename)s : %(message)s',
                         level=logging.DEBUG,
                         datefmt='%d/%m/%Y %I:%M:%S', handlers=[file_handler, console])
-    # (Line: %(lineno)d) :
 
     s = socket.socket()
     s.bind((IP, PORT))

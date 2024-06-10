@@ -5,17 +5,23 @@ import socket
 s = socket.socket()
 port = 55555
 s.connect(('127.0.0.1', port))
-message = s.recv(1024).decode()
+path = os.path.dirname(os.path.realpath(__file__)) + '\\'
 
-if message == 'give me your data':
-    if 'data.json' not in os.listdir():
-        with open('data.json', 'w') as file:
-            json.dump({"username": input('write your username')}, file)
+ans = s.recv(1024).decode()
+while ans != 'Successful login':
+    if ans == 'give me your data':
+        with open(f'{path}data.json', 'r') as file:
+            data = json.load(file)
+        s.send(str(data).encode())
 
-    with open('data.json', 'r') as file:
-        file = str(json.load(file))
-        print(str(file), type(file))
-        s.send(file.encode())
+    elif ans == 'select username':
+        with open(f'{path}data.json', 'r') as file:
+            data = json.load(file)
+        data['username'] = input(f'{ans}\n')
+        with open(f'{path}data.json', 'w') as file:
+            json.dump(data, file)
+        s.send(str(data).encode())
+    ans = s.recv(1024).decode()
 
 s.send(input('your_message\n').encode())
 s.close()
