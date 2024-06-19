@@ -65,7 +65,7 @@ class User:
                         self.data['username'] = input(f'{ans}\n')
                         self.update_data()
                         self.connection.send(pickle.dumps(self.data))
-                        logging.info(self.connection.recv(1024))
+                        logging.debug(self.connection.recv(1024))
 
                     case 'TypeMessage':
                         self.commands()
