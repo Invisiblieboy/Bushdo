@@ -2,7 +2,6 @@ import datetime
 import json
 import logging
 import os
-import pickle
 import random
 import socket
 import sys
@@ -21,20 +20,35 @@ class _Connection:
         self.global_data = self.server.update_data(get_from_memory=True)
         self.data = None
 
-    def auth(self):
-        self.client.send(b'GiveData')
-
+    def send(self, data: str):
         try:
-            self.data = pickle.loads(self.client.recv(1024))
-        except:
-            logging.error('Not successful load data file')
+            logging.debug(f'SEND to {self.data['username']} {data}')
+        except TypeError:
+            logging.debug(f'SEND {data}')
+        data = data.encode()
+        msg = f'{str(len(data)):>0{self.global_data['settings']['header_len']}}'.encode('UTF-8') + data
+
+        self.client.sendall(msg)
+
+    def recv(self) -> str:
+        data_len = int(self.client.recv(self.global_data['settings']['header_len']).decode())
+        data = self.client.recv(data_len).decode()
+        logging.debug(f'RECV {data}')
+        return data
+
+    def auth(self):
+        self.send('GiveData')
+        try:
+            self.data = json.loads(self.recv())
+        except Exception as e:
+            logging.error(f'Not successful load data file {e}')
             self.exit()
         else:
             if not self.data['username']:
-                self.client.send(b'SelectUserName')
+                self.send('SelectUserName')
                 id = generateUserID()
-                self.client.send(id.encode())
-                self.data = pickle.loads(self.client.recv(1024))
+                self.send(id)
+                self.data = json.loads(self.recv())
 
             if self.data['id'] not in self.global_data['users_all']:
                 self.global_data['users_all'][self.data['id']] = {"unread_messages": []}
@@ -45,14 +59,16 @@ class _Connection:
 
             if self.data['id'] not in self.global_data['users_online']:
                 self.global_data['users_online'].append(self.data['id'])
-            self.client.send(b'SuccessLogin')
-            logging.debug(f'Connect from {self.data['username']}')
+            self.send('SuccessLogin')
+            logging.info(f'Connect from {self.data['username']}')
 
             self.server.update_data()
 
     def commands(self, ans):
         ans = ans.split(' ')
         match ans[0]:
+            case 'history':
+                self.send(json.dumps(self.global_data['chats'][ans[1]]))
             case 'chat':
                 text = ''
                 for elem in ans[2:]:
@@ -71,7 +87,7 @@ class _Connection:
                     case 'nuwchat':
                         user_id = self.global_data['username2id'][ans[2]]
                         if user_id in self.global_data['users_all'][self.data['id']]:
-                            self.client.send(self.global_data['users_all'][self.data['id']][user_id].encode())
+                            self.send(self.global_data['users_all'][self.data['id']][user_id])
                         else:
                             id = generateChatID()
                             self.global_data['chats'][id] = []
@@ -79,7 +95,7 @@ class _Connection:
                             self.global_data['users_all'][self.data['id']][user_id] = id
                             self.global_data['users_all'][user_id][self.data['id']] = id
 
-                            self.client.send(id.encode())
+                            self.send(id)
         self.server.update_data()
 
     def exit(self, error=None):
@@ -87,32 +103,28 @@ class _Connection:
             logging.error(error)
         try:
             self.client.close()
-            print('assa0')
         except:
             pass
         try:
             self.server.all_connections.remove(self)
             logging.info(f'{self.data['username']} leave')
-            print('assa1')
         except:
             pass
         try:
             self.global_data['users_online'].remove(self.data['id'])
-            print('assa2')
         except:
             pass
         self.server.update_data()
-        print('assa3')
         exit()
 
     def run(self):
         self.auth()
         try:
             while 1:
-                self.client.send(b'TypeMessage')
-                ans = self.client.recv(1024).decode()
+                self.send('TypeMessage')
+                ans = self.recv()
                 self.commands(ans)
-                self.client.send(b'SuccessSend')
+                self.send('SuccessSend')
         except Exception as e:
             self.exit(e)
 
