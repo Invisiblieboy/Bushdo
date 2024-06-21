@@ -1,9 +1,13 @@
+import datetime
 import json
 import logging
 import os
 import pickle
+import random
 import socket
+import sys
 import threading
+import time
 
 from server.settings import *
 
@@ -16,38 +20,90 @@ class _Connection:
 
         self.global_data = self.server.update_data(get_from_memory=True)
         self.data = None
-        self.stop = False
 
     def auth(self):
         self.client.send(b'GiveData')
 
-        self.data = pickle.loads(self.client.recv(1024))
-        if not self.data['username']:
-            self.client.send(b'SelectUserName')
+        try:
             self.data = pickle.loads(self.client.recv(1024))
-        self.client.send(b'SuccessLogin')
+        except:
+            logging.error('Not successful load data file')
+            self.exit()
+        else:
+            if not self.data['username']:
+                self.client.send(b'SelectUserName')
+                id = generateUserID()
+                self.client.send(id.encode())
+                self.data = pickle.loads(self.client.recv(1024))
 
-        logging.debug(f'Connect from {self.data['username']}')
-        if self.data['username'] not in self.global_data['users_online']:
-            self.global_data['users_online'].append(self.data['username'])
-        if self.data['username'] not in self.global_data['users_all']:
-            self.global_data['users_all'][self.data['username']] = {"unreaded_messages": []}
+            if self.data['id'] not in self.global_data['users_all']:
+                self.global_data['users_all'][self.data['id']] = {"unread_messages": []}
+            if self.data['id'] not in self.global_data['id2username']:
+                self.global_data['id2username'][self.data['id']] = self.data['username']
+            if self.data['username'] not in self.global_data['username2id']:
+                self.global_data['username2id'][self.data['username']] = self.data['id']
 
-        self.server.update_data()
+            if self.data['id'] not in self.global_data['users_online']:
+                self.global_data['users_online'].append(self.data['id'])
+            self.client.send(b'SuccessLogin')
+            logging.debug(f'Connect from {self.data['username']}')
+
+            self.server.update_data()
 
     def commands(self, ans):
         ans = ans.split(' ')
         match ans[0]:
             case 'chat':
-                logging.info(ans)
+                text = ''
+                for elem in ans[2:]:
+                    text += elem + ' '
+                message = {"author": self.data['id'],
+                           "read": [self.data['id']],
+                           "date": str(datetime.datetime.now()),
+                           "text": text[:-1]}
+                logging.info(message)
+                self.global_data['chats'][ans[1]].append(message)
 
             case 'server':
                 match ans[1]:
                     case 'exit':
-                        self.client.close()
-                        self.global_data['users_online'].remove(self.data['username'])
-                        self.server.update_data()
-                        self.stop = True
+                        self.exit()
+                    case 'nuwchat':
+                        user_id = self.global_data['username2id'][ans[2]]
+                        if user_id in self.global_data['users_all'][self.data['id']]:
+                            self.client.send(self.global_data['users_all'][self.data['id']][user_id].encode())
+                        else:
+                            id = generateChatID()
+                            self.global_data['chats'][id] = []
+
+                            self.global_data['users_all'][self.data['id']][user_id] = id
+                            self.global_data['users_all'][user_id][self.data['id']] = id
+
+                            self.client.send(id.encode())
+        self.server.update_data()
+
+    def exit(self, error=None):
+        if error:
+            logging.error(error)
+        try:
+            self.client.close()
+            print('assa0')
+        except:
+            pass
+        try:
+            self.server.all_connections.remove(self)
+            logging.info(f'{self.data['username']} leave')
+            print('assa1')
+        except:
+            pass
+        try:
+            self.global_data['users_online'].remove(self.data['id'])
+            print('assa2')
+        except:
+            pass
+        self.server.update_data()
+        print('assa3')
+        exit()
 
     def run(self):
         self.auth()
@@ -55,20 +111,18 @@ class _Connection:
             while 1:
                 self.client.send(b'TypeMessage')
                 ans = self.client.recv(1024).decode()
-                logging.debug(f'{self.data['username']} {ans}')
                 self.commands(ans)
-                if self.stop:
-                    break
                 self.client.send(b'SuccessSend')
         except Exception as e:
-            logging.info(f'{self.data['username']} leave')
-            self.client.close()
-            self.global_data['users_online'].remove(self.data['username'])
-            self.server.update_data()
-            logging.error(e)
+            self.exit(e)
 
-    def __del__(self):
-        pass
+
+def generateUserID() -> str:
+    return "1" + str(random.randint(10 ** 9, 10 ** 10 - 1))
+
+
+def generateChatID() -> str:
+    return "2" + str(random.randint(10 ** 9, 10 ** 10 - 1))
 
 
 class Server:
@@ -98,9 +152,22 @@ class Server:
     def run(self):
         while True:
             client, addr = self.socket.accept()
-            print('connect', client)
             connect = _Connection(self, client, addr)
-            threading.Thread(target=connect.run).start()
+            self.all_connections.append(connect)
+            threading.Thread(target=connect.run, daemon=True).start()
+
+    def ConsoleHandler(self):
+        while 1:
+            text = input()
+            if text == '!exit':
+                for connect in self.all_connections:
+                    logging.info(f'Terminate {connect}')
+                    connect.exit()
+                sys.exit()
+            else:
+                print(text)
+
+            time.sleep(0.1)
 
 
 if __name__ == '__main__':
@@ -113,4 +180,5 @@ if __name__ == '__main__':
                         datefmt='%d/%m/%Y %I:%M:%S', handlers=[console])
 
     server = Server()
-    server.run()
+    threading.Thread(target=server.run, daemon=True).start()
+    server.ConsoleHandler()

@@ -14,11 +14,15 @@ logging.basicConfig(format='%(asctime)s : %(levelname)s : %(filename)s : %(messa
 
 class User:
     def __init__(self):
-        self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connection.connect((socket.gethostname(), 60000))
-        self.path = os.path.dirname(os.path.realpath(__file__)) + '\\'
-
+        if 'data.json' in os.listdir():
+            self.path = ""
+        else:
+            self.path = os.path.dirname(os.path.realpath(__file__)) + '\\'
         self.data = self.update_data(get=True)
+
+        self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connection.connect((str(self.data['server'][0]), int(self.data['server'][1])))
+
         self.selected_user = None
 
     def update_data(self, get=False):
@@ -32,10 +36,10 @@ class User:
 
     def commands(self):
         while 1:
-            inp = input()
+            inp = input('>> ')
             if inp:
-                inp = inp.split(' ')
-                if inp[0][0] == "!":
+                if inp[0] == "!":
+                    inp = inp.split(' ')
                     match inp[0][1:]:
                         case 'exit':
                             self.connection.send(b'server exit')
@@ -43,13 +47,16 @@ class User:
                             exit()
                         case 'chat':
                             if len(inp) == 1:
-                                print("Please choise user")
+                                print("Please choice user")
                             else:
                                 self.selected_user = inp[1]
+                                if self.selected_user not in self.data['chats']:
+                                    self.connection.send(f'server nuwchat {self.selected_user}'.encode())
+                                    self.data['chats'][self.selected_user] = self.connection.recv(1024).decode()
+                                    self.update_data()
                 else:
                     if self.selected_user:
-                        self.connection.send(f'chat {self.selected_user} {inp[0]}'.encode())
-                        break
+                        self.connection.send(f'chat {self.data['chats'][self.selected_user]} {inp}'.encode())
                     else:
                         logging.error('User Not Select')
 
@@ -62,7 +69,9 @@ class User:
                         self.connection.send(pickle.dumps(self.data))
 
                     case 'SelectUserName':
+                        id = self.connection.recv(1024).decode()
                         self.data['username'] = input(f'{ans}\n')
+                        self.data['id'] = id
                         self.update_data()
                         self.connection.send(pickle.dumps(self.data))
                         logging.debug(self.connection.recv(1024))
