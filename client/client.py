@@ -6,8 +6,8 @@ import socket
 file_handler = logging.FileHandler('client.log', mode='w')
 file_handler.setLevel(logging.DEBUG)
 console = logging.StreamHandler()
-console.setLevel(logging.ERROR)
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(filename)s : %(message)s', level=logging.DEBUG,
+console.setLevel(logging.DEBUG)
+logging.basicConfig(format='%(asctime)s : %(levelname)s : [%(filename)s:%(lineno)d] : %(message)s', level=logging.DEBUG,
                     datefmt='%d/%m/%Y %I:%M:%S', handlers=[file_handler, console])
 
 
@@ -70,16 +70,18 @@ class User:
                                 self.update_data()
 
                         self.send(f'history {self.data['chats'][inp[1]]}')
-                        chat_width = int(self.data['settings']['chat_width'])
+                        chat = json.loads(self.recv())
 
-                        # os.system('cls')
-                        logging.debug(inp[1])
+                        chat_width = int(self.data['settings']['chat_width'])
+                        os.system('cls')
+                        logging.debug(f'chat with {inp[1]}')
                         print(f'{inp[1]:<{chat_width // 2}}{'ME':>{chat_width // 2}}', end='\n\n')
-                        for message in json.loads(self.recv()):
-                            if message['author'] == self.data['id']:
-                                print(f'{message['text']:>{chat_width}}')
-                            else:
-                                print(f'{message['text']:<{chat_width}}')
+                        if chat:
+                            for message in chat:
+                                if message['author'] == self.data['id']:
+                                    print(f'{message['text']:>{chat_width}}')
+                                else:
+                                    print(f'{message['text']:<{chat_width}}')
 
             else:
                 if self.selected_user:
@@ -94,8 +96,6 @@ class User:
                 match ans:
                     case 'GiveData':
                         self.send(json.dumps(self.data))
-                        if self.recv() == 'SuccessLogin':
-                            print('SuccessLogin')
 
                     case 'SelectUserName':
                         id = self.recv()
@@ -107,11 +107,12 @@ class User:
 
                     case 'TypeMessage':
                         self.commands()
-                        if self.recv() != 'SuccessSend':
-                            logging.error('UnSuccessSend')
 
                     case _:
-                        logging.debug(f'NOT DISTRIBUTED {ans}')
+                        if ans == 'SuccessLogin':
+                            print('SuccessLogin')
+                        else:
+                            logging.debug(f'NOT DISTRIBUTED {ans}')
 
         except Exception as e:
             self.connection.close()

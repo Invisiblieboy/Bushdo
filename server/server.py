@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 
-from server.settings import *
+from settings import *
 
 
 class _Connection:
@@ -26,12 +26,12 @@ class _Connection:
         except TypeError:
             logging.debug(f'SEND {data}')
         data = data.encode()
-        msg = f'{str(len(data)):>0{self.global_data['settings']['header_len']}}'.encode('UTF-8') + data
+        msg = f'{str(len(data)):>0{header_len}}'.encode('UTF-8') + data
 
         self.client.sendall(msg)
 
     def recv(self) -> str:
-        data_len = int(self.client.recv(self.global_data['settings']['header_len']).decode())
+        data_len = int(self.client.recv(header_len).decode())
         data = self.client.recv(data_len).decode()
         logging.debug(f'RECV {data}')
         return data
@@ -85,9 +85,9 @@ class _Connection:
                     case 'exit':
                         self.exit()
                     case 'nuwchat':
-                        user_id = self.global_data['username2id'][ans[2]]
+                        user_id = self.global_data['username2id'].get(ans[2])
                         if user_id in self.global_data['users_all'][self.data['id']]:
-                            self.send(self.global_data['users_all'][self.data['id']][user_id])
+                            self.send(self.global_data['users_all'][self.data['id']].get(user_id))
                         else:
                             id = generateChatID()
                             self.global_data['chats'][id] = []
@@ -96,6 +96,8 @@ class _Connection:
                             self.global_data['users_all'][user_id][self.data['id']] = id
 
                             self.send(id)
+        if ans[0] != 'server':
+            self.send('TypeMessage')
         self.server.update_data()
 
     def exit(self, error=None):
@@ -119,12 +121,10 @@ class _Connection:
 
     def run(self):
         self.auth()
+        self.send('TypeMessage')
         try:
             while 1:
-                self.send('TypeMessage')
-                ans = self.recv()
-                self.commands(ans)
-                self.send('SuccessSend')
+                self.commands(self.recv())
         except Exception as e:
             self.exit(e)
 
@@ -170,27 +170,66 @@ class Server:
 
     def ConsoleHandler(self):
         while 1:
-            text = input()
-            if text == '!exit':
+            text = input().split(' ')
+            if text[0] == '!exit':
                 for connect in self.all_connections:
                     logging.info(f'Terminate {connect}')
                     connect.exit()
                 sys.exit()
+            elif text[0] == '!del':
+                del_user(text[1])
             else:
                 print(text)
 
             time.sleep(0.1)
 
 
-if __name__ == '__main__':
+def del_user(user):
+    with open(f'server/data.json', 'r') as file:
+        data = json.load(file)
+    if data['username2id'].get(user):
+        username = user
+        id = data['username2id'].get(user)
+    elif data['id2username'].get(user):
+        id = user
+        username = data['id2username'].get(user)
+    else:
+        print(f'Unknown user {user}')
+        return 1
+
+    del data['username2id'][username]
+    del data['id2username'][id]
+
+    for chat in data['users_all'][id].items():
+        print(chat)
+        try:
+            if chat[0] != 'unread_messages':
+                del data['users_all'][chat[0]][id]
+            if chat[1]:
+                del data['chats'][chat[1]]
+        except Exception as e:
+            print(f'Error {e}')
+
+    del data['users_all'][id]
+
+    with open(f'server/data.json', 'w') as file:
+        json.dump(data, file, indent=2)
+    print(f'Success delete {username}')
+
+
+def main():
     file_handler = logging.FileHandler('server/server.log', mode='w')
     file_handler.setLevel(logging.DEBUG)
     console = logging.StreamHandler()
     console.setLevel(logging.DEBUG)
-    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(filename)s : %(message)s',
+    logging.basicConfig(format='%(asctime)s : %(levelname)s : [%(filename)s:%(lineno)d] : %(message)s',
                         level=logging.DEBUG,
                         datefmt='%d/%m/%Y %I:%M:%S', handlers=[console])
 
     server = Server()
     threading.Thread(target=server.run, daemon=True).start()
     server.ConsoleHandler()
+
+
+if __name__ == '__main__':
+    main()
