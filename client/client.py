@@ -2,42 +2,48 @@ import json
 import logging
 import os
 import socket
-
-file_handler = logging.FileHandler('client.log', mode='w')
-file_handler.setLevel(logging.DEBUG)
-console = logging.StreamHandler()
-console.setLevel(logging.DEBUG)
-logging.basicConfig(format='%(asctime)s : %(levelname)s : [%(filename)s:%(lineno)d] : %(message)s', level=logging.DEBUG,
-                    datefmt='%d/%m/%Y %I:%M:%S', handlers=[file_handler, console])
+import threading
 
 
 class User:
-    def __init__(self):
+    def __init__(self) -> None:
         if 'data.json' in os.listdir():
-            self.path = ""
+            self.path: str = ""
         else:
-            self.path = os.path.dirname(os.path.realpath(__file__)) + '\\'
+            self.path: str = os.path.dirname(os.path.realpath(__file__)) + '\\'
         self.data = self.update_data(get_from_file=True)
 
         self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connection.connect((str(self.data['server'][0]), int(self.data['server'][1])))
+        if socket.gethostname() == 'DESKTOP-L2DEF1J':
+            IP = '127.0.0.1'
+        else:
+            IP = str(self.data['server'][0])
+
+        self.connection.connect((IP, int(self.data['server'][1])))
 
         self.selected_user = None
+        threading.Thread(target=self.recv_nonstop)
 
-    def send(self, data: str):
+    def send(self, data: str) -> None:
         logging.debug(f'SEND  {data}')
-        data = data.encode()
-        msg = f'{str(len(data)):>0{self.data['settings']['header_len']}}'.encode('UTF-8') + data
-
+        msg = f'{str(len(data)):>0{self.data['settings']['header_len']}}'.encode('UTF-8') + data.encode()
         self.connection.sendall(msg)
 
     def recv(self) -> str:
-        data_len = int(self.connection.recv(self.data['settings']['header_len']).decode())
-        data = self.connection.recv(data_len).decode()
+        data_len: int = int(self.connection.recv(self.data['settings']['header_len']).decode())
+        data: str = self.connection.recv(data_len).decode()
         logging.debug(f'RECV {data}')
         return data
 
-    def update_data(self, get_from_file=False, get_from_memory=False):
+    def recv_nonstop(self):
+        inp: list[str] = self.recv().split()
+
+        if inp[0] == 'nuw_message':
+            self.data['chat_history'][inp[1]] = json.loads(''.join(inp[2:]))
+            if self.selected_user == inp[1]:
+                self.update_chat()
+
+    def update_data(self, get_from_file: bool = False, get_from_memory: bool = False) -> dict:
         if get_from_file:
             with open(f'{self.path}data.json', 'r') as file:
                 self.data = json.load(file)
@@ -48,11 +54,11 @@ class User:
             json.dump(self.data, file, indent=2)
         return self.data
 
-    def commands(self):
-        inp = input('>> ')
+    def commands(self) -> None:
+        inp: str = input('>> ')
         if inp:
             if inp[0] == "!":
-                inp = inp.split(' ')
+                inp: list = inp.split(' ')
                 match inp[0][1:]:
                     case 'exit':
                         self.send('server exit')
@@ -62,37 +68,53 @@ class User:
                     case 'chat':
                         if len(inp) == 1:
                             print("Please choice user")
+
                         else:
-                            self.selected_user = inp[1]
-                            if self.selected_user not in self.data['chats']:
+                            self.selected_user: str = inp[1]
+                            if self.selected_user not in self.data['chats_id']:
                                 self.send(f'server nuwchat {self.selected_user}')
-                                self.data['chats'][self.selected_user] = self.recv()
+                                self.data['chats_id'][self.selected_user] = self.recv()
                                 self.update_data()
 
-                        self.send(f'history {self.data['chats'][inp[1]]}')
-                        chat = json.loads(self.recv())
+                            self.send(f'history {self.data['chats_id'][inp[1]]}')
+                            chat: list = json.loads(self.recv())
 
-                        chat_width = int(self.data['settings']['chat_width'])
-                        os.system('cls')
-                        logging.debug(f'chat with {inp[1]}')
-                        print(f'{inp[1]:<{chat_width // 2}}{'ME':>{chat_width // 2}}', end='\n\n')
-                        if chat:
-                            for message in chat:
-                                if message['author'] == self.data['id']:
-                                    print(f'{message['text']:>{chat_width}}')
-                                else:
-                                    print(f'{message['text']:<{chat_width}}')
+                            self.data['chats_history'][self.selected_user] = chat
+                            self.update_data()
+                            self.update_chat()
+
 
             else:
                 if self.selected_user:
-                    self.send(f'chat {self.data['chats'][self.selected_user]} {inp}')
+                    self.send(f'chat {self.data['chats_id'][self.selected_user]} {inp}')
+                    self.data['chats_history'][self.selected_user].append(json.loads(self.recv()))
+                    self.update_data()
+                    self.update_chat()
                 else:
                     logging.error('User Not Select')
+                    return self.commands()
+        else:
+            return self.commands()
 
-    def run(self):
+
+    def update_chat(self):
+        chat = self.data['chats_history'][self.selected_user]
+        chat_width: int = int(self.data['settings']['chat_width'])
+        os.system('cls')
+        logging.debug(f'chat with {self.selected_user}')
+
+        print(f'{self.selected_user:<{chat_width // 2}}{'ME':>{chat_width // 2}}', end='\n\n')
+        if chat:
+            for message in chat:
+                if message['author'] == self.data['id']:
+                    print(f'{message['text']:>{chat_width}}')
+                else:
+                    print(f'{message['text']:<{chat_width}}')
+
+    def run(self) -> None:
         try:
             while 1:
-                ans = self.recv()
+                ans: str = self.recv()
                 match ans:
                     case 'GiveData':
                         self.send(json.dumps(self.data))
@@ -119,5 +141,14 @@ class User:
             logging.error(e)
 
 
-A = User()
-A.run()
+if __name__ == '__main__':
+    file_handler = logging.FileHandler('client.log', mode='w')
+    file_handler.setLevel(logging.DEBUG)
+    console = logging.StreamHandler()
+    console.setLevel(logging.ERROR)
+    logging.basicConfig(format='%(asctime)s : %(levelname)s : [%(filename)s:%(lineno)d] : %(message)s',
+                        level=logging.DEBUG,
+                        datefmt='%d/%m/%Y %I:%M:%S', handlers=[file_handler, console])
+
+    A = User()
+    A.run()

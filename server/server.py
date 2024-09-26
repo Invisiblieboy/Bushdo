@@ -2,17 +2,17 @@ import datetime
 import json
 import logging
 import os
+
+from settings import *
 import random
 import socket
 import sys
 import threading
 import time
 
-from settings import *
-
 
 class _Connection:
-    def __init__(self, server, client, addr):
+    def __init__(self, server, client, addr) -> None:
         self.server = server
         self.client = client
         self.addr = addr
@@ -20,7 +20,7 @@ class _Connection:
         self.global_data = self.server.update_data(get_from_memory=True)
         self.data = None
 
-    def send(self, data: str):
+    def send(self, data: str) -> None:
         try:
             logging.debug(f'SEND to {self.data['username']} {data}')
         except TypeError:
@@ -39,15 +39,14 @@ class _Connection:
     def auth(self):
         self.send('GiveData')
         try:
-            self.data = json.loads(self.recv())
+            self.data: dict = json.loads(self.recv())
         except Exception as e:
             logging.error(f'Not successful load data file {e}')
             self.exit()
         else:
             if not self.data['username']:
                 self.send('SelectUserName')
-                id = generateUserID()
-                self.send(id)
+                self.send(generateUserID())
                 self.data = json.loads(self.recv())
 
             if self.data['id'] not in self.global_data['users_all']:
@@ -63,6 +62,7 @@ class _Connection:
             logging.info(f'Connect from {self.data['username']}')
 
             self.server.update_data()
+            self.server.all_connections[self.data['id']]=self
 
     def commands(self, ans):
         ans = ans.split(' ')
@@ -77,6 +77,8 @@ class _Connection:
                            "read": [self.data['id']],
                            "date": str(datetime.datetime.now()),
                            "text": text[:-1]}
+                # self.server.all_connections[]
+                self.send(json.dumps(message))
                 logging.info(message)
                 self.global_data['chats'][ans[1]].append(message)
 
@@ -108,7 +110,7 @@ class _Connection:
         except:
             pass
         try:
-            self.server.all_connections.remove(self)
+            self.server.all_connections.remove(self.data['id'])
             logging.info(f'{self.data['username']} leave')
         except:
             pass
@@ -141,14 +143,14 @@ class Server:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.bind((socket.gethostname(), PORT))
+        self.socket.bind((IP, PORT))
         self.socket.listen(port_count)
         logging.debug('Socket is listening')
 
         self.path = os.path.dirname(os.path.realpath(__file__)) + '\\'
         self.data = self.update_data(get_from_file=True)
 
-        self.all_connections = []
+        self.all_connections = {}
 
     def update_data(self, get_from_file=False, get_from_memory=False):
         if get_from_file:
@@ -165,14 +167,13 @@ class Server:
         while True:
             client, addr = self.socket.accept()
             connect = _Connection(self, client, addr)
-            self.all_connections.append(connect)
             threading.Thread(target=connect.run, daemon=True).start()
 
     def ConsoleHandler(self):
         while 1:
             text = input().split(' ')
             if text[0] == '!exit':
-                for connect in self.all_connections:
+                for connect in self.all_connections.keys():
                     logging.info(f'Terminate {connect}')
                     connect.exit()
                 sys.exit()
