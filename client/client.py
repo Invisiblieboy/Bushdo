@@ -3,6 +3,8 @@ import logging
 import os
 import socket
 import threading
+from textwrap import indent
+from typing import is_typeddict
 
 
 class User:
@@ -11,7 +13,14 @@ class User:
             self.path: str = ""
         else:
             self.path: str = os.path.dirname(os.path.realpath(__file__)) + '\\'
-        self.data = self.update_data(get_from_file=True)
+
+        try:
+            self.data = self.update_data(get_from_file=True)
+        except:
+            self.data = {}
+            self.data['server']=['192.168.31.231',60000]
+            self.data['settings']={'header_len':10}
+            self.data['not_complete']=True
 
         self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if socket.gethostname() == 'DESKTOP-L2DEF1J':
@@ -22,11 +31,18 @@ class User:
         self.connection.connect((IP, int(self.data['server'][1])))
 
         self.selected_user = None
-        threading.Thread(target=self.recv_nonstop)
+        # threading.Thread(target=self.recv_nonstop)
 
-    def send(self, data: str) -> None:
+    def send(self, type: str, version: str | float | int, data: str | dict) -> None:
+        data = {'data': data, 'type': type, 'version': version}
+
+        print(data)
         logging.debug(f'SEND  {data}')
-        msg = f'{str(len(data)):>0{self.data['settings']['header_len']}}'.encode('UTF-8') + data.encode()
+
+        data = json.dumps(data)
+        header = f'{str(len(data)):>0{self.data['settings']['header_len']}}'
+
+        msg = header.encode('UTF-8') + data.encode()
         self.connection.sendall(msg)
 
     def recv(self) -> str:
@@ -61,7 +77,7 @@ class User:
                 inp: list = inp.split(' ')
                 match inp[0][1:]:
                     case 'exit':
-                        self.send('server exit')
+                        self.send('exit', 1, 'user exit')
                         self.connection.close()
                         exit()
 
@@ -72,11 +88,11 @@ class User:
                         else:
                             self.selected_user: str = inp[1]
                             if self.selected_user not in self.data['chats_id']:
-                                self.send(f'server nuwchat {self.selected_user}')
+                                self.send('server', 1, {'action': 'nuwchat', 'id': self.selected_user})
                                 self.data['chats_id'][self.selected_user] = self.recv()
                                 self.update_data()
 
-                            self.send(f'history {self.data['chats_id'][inp[1]]}')
+                            self.send('history', 1, {'action': 'get history', 'id': self.data['chats_id'][inp[1]]})
                             chat: list = json.loads(self.recv())
 
                             self.data['chats_history'][self.selected_user] = chat
@@ -86,7 +102,10 @@ class User:
 
             else:
                 if self.selected_user:
-                    self.send(f'chat {self.data['chats_id'][self.selected_user]} {inp}')
+                    self.send('chat', 1, {
+                        'action': 'nuw message',
+                        'id': self.data['chats_id'][self.selected_user],
+                        'message': inp})
                     self.data['chats_history'][self.selected_user].append(json.loads(self.recv()))
                     self.update_data()
                     self.update_chat()
@@ -95,7 +114,6 @@ class User:
                     return self.commands()
         else:
             return self.commands()
-
 
     def update_chat(self):
         chat = self.data['chats_history'][self.selected_user]
@@ -112,19 +130,28 @@ class User:
                     print(f'{message['text']:<{chat_width}}')
 
     def run(self) -> None:
+
+
         try:
             while 1:
                 ans: str = self.recv()
                 match ans:
                     case 'GiveData':
-                        self.send(json.dumps(self.data))
+                        self.send('Response', 1, self.data)
+                        if self.data['not_complete']:
+                            with open('data.json','w') as file:
+                                response=self.recv()
+                                print('r',response)
+                                if not isinstance(response,dict):
+                                    response=json.loads(response)
+                                json.dump(response,file,indent=2)
 
                     case 'SelectUserName':
                         id = self.recv()
                         self.data['username'] = input(f'{ans}\n')
                         self.data['id'] = id
                         self.update_data()
-                        self.send(json.dumps(self.data))
+                        self.send('Response', 1, self.data)
                         logging.debug(self.recv())
 
                     case 'TypeMessage':
@@ -152,3 +179,4 @@ if __name__ == '__main__':
 
     A = User()
     A.run()
+    input()

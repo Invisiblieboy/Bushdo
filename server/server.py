@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+from threading import Thread
 
 from settings import *
 import random
@@ -30,24 +31,31 @@ class _Connection:
 
         self.client.sendall(msg)
 
-    def recv(self) -> str:
+    def recv(self) -> dict:
         data_len = int(self.client.recv(header_len).decode())
         data = self.client.recv(data_len).decode()
         logging.debug(f'RECV {data}')
-        return data
+        return json.loads(data)
 
     def auth(self):
         self.send('GiveData')
         try:
-            self.data: dict = json.loads(self.recv())
+            self.data: dict = self.recv()['data']
         except Exception as e:
             logging.error(f'Not successful load data file {e}')
             self.exit()
         else:
+            if self.data['not_complete']:
+                with open(r'server/user/data.json','r') as file:
+                    data=json.load(file)
+                    print(data)
+                    self.send(data)
+                self.send('GiveData')
+                self.data: dict = self.recv()['data']
             if not self.data['username']:
                 self.send('SelectUserName')
                 self.send(generateUserID())
-                self.data = json.loads(self.recv())
+                self.data = self.recv()['data']
 
             if self.data['id'] not in self.global_data['users_all']:
                 self.global_data['users_all'][self.data['id']] = {"unread_messages": []}
@@ -65,8 +73,7 @@ class _Connection:
             self.server.all_connections[self.data['id']]=self
 
     def commands(self, ans):
-        ans = ans.split(' ')
-        match ans[0]:
+        match ans['type']:
             case 'history':
                 self.send(json.dumps(self.global_data['chats'][ans[1]]))
             case 'chat':
@@ -234,3 +241,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+    from client.client import User
+
+    User().run()
