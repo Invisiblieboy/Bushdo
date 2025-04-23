@@ -133,3 +133,40 @@ if __name__ == '__main__':
 
     server = Server()
     server.start()
+    exit()
+
+
+import asyncio
+import os
+import sys
+
+from fastapi import FastAPI
+
+import v1
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(dir_path)
+
+app = FastAPI()
+
+
+@app.get("/")
+def root():
+    return {"msg": "Bushdo v0.0.1"}
+
+
+app.include_router(v1.v1_router)
+
+
+async def main():
+    await v1.init()
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+
+# uvicorn --reload --port 8000 main:app
+# --break-system-packages
+
+# uvicorn.run(app, port=8000)
+

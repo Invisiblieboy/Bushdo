@@ -22,7 +22,7 @@ class _ClientHandler:
         with open(fr'server/user/data.json', 'r') as file:
             self.user_data_file = json.load(file)
 
-    def send(self, type: str, version: str|float|int, session: str, data: None | dict = None) -> None:
+    def send(self, type: str, version: str | float | int, session: str, data: None | dict = None) -> None:
         message = {'data': data, 'type': type, 'version': str(version), 'session': session,
                    'time': time.time().__str__(),
                    'author': 'server'}
@@ -46,7 +46,6 @@ class _ClientHandler:
         self.client.sendall(msg)
         # self.__save_sessions()
 
-
     def __recv_session(self, session: str, waiting: bool):
         def check_messages():
             for i, message in enumerate(self.sessions[session]):
@@ -54,6 +53,7 @@ class _ClientHandler:
                     message['nuw_message'] = False
                     self.sessions[session][i] = message
                     return message
+
         if waiting:
             while 1:
                 otv = check_messages()
@@ -63,9 +63,9 @@ class _ClientHandler:
         else:
             return check_messages()
 
-    def _recv(self,session=None,waiting: bool =True) -> dict:
+    def _recv(self, session=None, waiting: bool = True) -> dict:
         if session:
-            return self.__recv_session(session,waiting)
+            return self.__recv_session(session, waiting)
         try:
             data_len = int(self.client.recv(header_len).decode())
         except ConnectionResetError:
@@ -103,20 +103,19 @@ class _ClientHandler:
         with open('sessions.json', 'w') as file:
             json.dump(self.sessions, file, indent=2)
 
-
     def _message_server_handler(self, message):
         session = message['session']
         match message['data']['action']:
             case 'get_clear_userdata':
                 self.send('server', '1', session, {'action': 'get_clear_userdata', 'data': self.user_data_file,
-                                                   'return':True})
+                                                   'return': True})
             case 'user_exit':
                 # self.send('session_end', '1', session)
                 self.exit()
             case 'user_id':
-                user_id=generateUserID()
+                user_id = generateUserID()
                 self.send('server', '1', session, {'action': 'user_id', 'id': user_id,
-                                           'return': True})
+                                                   'return': True})
             case _:
                 logging.error(f'Unknown action {message}')
 
@@ -133,29 +132,29 @@ class _ClientHandler:
                     self.global_data['users_all'][self.data['id']][friend_id] = chat_id
                     self.global_data['users_all'][friend_id][self.data['id']] = chat_id
 
-                self.send('chat', '1', session,{'action':'nuw_chat',
-                                                'return':True,
-                                                'chat_id': chat_id,
-                                                'friend_id':friend_id})
+                self.send('chat', '1', session, {'action': 'nuw_chat',
+                                                 'return': True,
+                                                 'chat_id': chat_id,
+                                                 'friend_id': friend_id})
                 self.server.update_data()
 
             case 'get_history':
                 chat_id = self.global_data['users_all'][self.data['id']][message['data']['id']]
                 chat_history = self.global_data['chats'][chat_id]
-                self.send('chat', '1', session, {'action': 'get_history', 'data': chat_history,'return':True})
+                self.send('chat', '1', session, {'action': 'get_history', 'data': chat_history, 'return': True})
 
             case 'nuw_message':
                 chat_id = self.global_data['users_all'][self.data['id']][message['data']['id']]
-                connection:_ClientHandler = self.server.authorized_connection.get(message['data']['id'])
+                connection: _ClientHandler = self.server.authorized_connection.get(message['data']['id'])
 
                 message_nuw = {"author": self.data['id'], "read": [self.data['id']], "date": time.time().__str__(),
-                           "text": message['data']['data']}
+                               "text": message['data']['data']}
                 self.global_data['chats'][chat_id].append(message_nuw)
 
-                connection.send('chat',1,session,{'action':'nuw_message',
-                                            'chat_id':chat_id,
-                                            'friend_id':self.data['id'],
-                                            'data':message_nuw})
+                connection.send('chat', 1, session, {'action': 'nuw_message',
+                                                     'chat_id': chat_id,
+                                                     'friend_id': self.data['id'],
+                                                     'data': message_nuw})
 
                 time.sleep(0.1)
                 self.send('session_end', '1', session)
@@ -209,9 +208,9 @@ class _ClientHandler:
         sys.exit()
 
     def start(self):
-        threading.Thread(target=self._recv_nonstop,daemon=True).start()
+        threading.Thread(target=self._recv_nonstop, daemon=True).start()
         self.auth()
-        time.sleep(10**4)
+        time.sleep(10 ** 4)
 
     def get_name(self):
         try:

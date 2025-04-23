@@ -7,15 +7,46 @@ import threading
 import time
 import uuid
 
+import requests
+import rsa
+
+from uuid_extensions import uuid7, uuid7str
+
+def _remove_dir(path: str):
+    for file in os.listdir(path):
+        if os.path.isdir(path + file):
+            _remove_dir(path + file)
+        else:
+            os.remove(path + rf'\\' + file)
+    os.rmdir(path)
+
 
 class User:
     def __init__(self) -> None:
-        self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        if socket.gethostname() == 'DESKTOP-L2DEF1J':
+        first_print = 0
+        while 1:
+            response = requests.get("https://raw.githubusercontent.com/Invisiblieboy/Bushdo/main/url.txt")
+            if response.status_code == 200:
+                self.url = response.content.decode().strip()
+                os.system('cls')
+                break
+            if not first_print:
+                first_print = 1
+            os.system('cls')
+            print(f'Connecting{'.' * (first_print % 3)}')
+            first_print += 1
+            time.sleep(0.2)
+
+        self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print(socket.gethostname())
+        print(self.url)
+
+        if socket.gethostname() == 'DESKTOP-L2DEF1J' and True:
             self.connection.connect((socket.gethostname(), 60000))
         else:
-            self.connection.connect(('26.84.94.16', 60000))
+            self.connection.connect(('340f-95-181-167-70.ngrok-free.app', 433))
+            # self.connection.connect(('26.132.234.75', 60000))
 
         self.sessions = {}
         self.selected_user = None
@@ -216,7 +247,7 @@ class User:
 
                     self.data['chats'][self.selected_user].append(
                         {"author": self.data['id'], "read": [self.data['id']], "date": time.time().__str__(),
-                            "text": inp})
+                         "text": inp})
 
                     self.update_data()
                     self.update_chat()
@@ -261,4 +292,17 @@ if __name__ == '__main__':
     user = User()
     user.console_handler()
 
+    exit()
+    pubkey, privkey = rsa.newkeys(512)
+    crypto_mess = rsa.encrypt('hello'.encode('utf8'), pubkey)
+    mess = rsa.decrypt(crypto_mess, privkey).decode('utf8')
+
+    print(pubkey.n)
+    print(privkey)
+    print(crypto_mess, mess)
+
+    for i in range(100):
+        print(uuid7str(), uuid.uuid4())
+
     # pyinstaller -F -n Bushdo -i "C:\Users\serdy\PycharmProjects\Bushdo\Bushdo.ico" client/client.py
+

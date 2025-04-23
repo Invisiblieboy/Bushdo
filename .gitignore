@@ -1,0 +1,12 @@
+*.log
+.gitignore
+
+venv
+.venv
+server
+build
+dist/data.json
+users
+
+Bushdo.ico
+Bushdo.spec
